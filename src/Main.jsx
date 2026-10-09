@@ -45,10 +45,22 @@ function App() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data, error }) => {
-      if (error) setAuthMessage(error.message);
-      setUser(data?.session?.user ?? null);
-    });
+    let mounted = true;
+
+    async function getInitialSession() {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (!mounted) return;
+
+      if (error) {
+        setAuthMessage(error.message);
+        return;
+      }
+
+      setUser(data.session?.user ?? null);
+    }
+
+    getInitialSession();
 
     const { data } = supabase.auth.onAuthStateChange(
       (_event, session) => {
@@ -56,27 +68,39 @@ function App() {
       }
     );
 
-    return () => data.subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      data.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
     async function loadProfile() {
-      if (!user) return;
+      if (!user) {
+        setName("");
+        setGoal("Build muscle");
+        setLevel("Beginner");
+        setSaved(false);
+        return;
+      }
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("display_name, experience_level")
+        .select("display_name, experience_level, goal")
         .eq("id", user.id)
         .maybeSingle();
 
       if (error) {
-        setAuthMessage("Could not load profile: " + error.message);
+        setAuthMessage(
+          "Could not load profile: " + error.message
+        );
         return;
       }
 
       if (data) {
         setName(data.display_name || "");
         setLevel(data.experience_level || "Beginner");
+        setGoal(data.goal || "Build muscle");
       }
     }
 
@@ -90,10 +114,11 @@ function App() {
 
     try {
       if (authMode === "signup") {
-        const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password
-        });
+        const { data, error } =
+          await supabase.auth.signUp({
+            email: email.trim(),
+            password
+          });
 
         if (error) throw error;
 
@@ -102,15 +127,16 @@ function App() {
           setPage("Profile");
         } else {
           setAuthMessage(
-            "Registration started. Check your email to confirm your account, then log in."
+            "Check your email to confirm your account, then log in."
           );
           setAuthMode("login");
         }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password
-        });
+        const { error } =
+          await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password
+          });
 
         if (error) throw error;
 
@@ -118,29 +144,42 @@ function App() {
         setPage("Profile");
       }
     } catch (error) {
-      setAuthMessage(error.message || "Authentication failed.");
+      setAuthMessage(
+        error.message || "Authentication failed."
+      );
     } finally {
       setBusy(false);
     }
   }
 
   async function handleLogout() {
-    const { error } = await supabase.auth.signOut();
+    setBusy(true);
 
-    if (error) {
-      setAuthMessage(error.message);
-      return;
+    try {
+      const { error } = await supabase.auth.signOut();
+
+      if (error) throw error;
+
+      setName("");
+      setGoal("Build muscle");
+      setLevel("Beginner");
+      setSaved(false);
+      setAuthMessage("You have logged out.");
+      setPage("Home");
+    } catch (error) {
+      setAuthMessage(
+        error.message || "Could not log out."
+      );
+    } finally {
+      setBusy(false);
     }
-
-    setName("");
-    setSaved(false);
-    setAuthMessage("You have logged out.");
-    setPage("Home");
   }
 
   async function saveProfile() {
     if (!user) {
-      setAuthMessage("Please log in before saving your profile.");
+      setAuthMessage(
+        "Please log in before saving your profile."
+      );
       setPage("Account");
       return;
     }
@@ -152,29 +191,35 @@ function App() {
 
     setBusy(true);
     setAuthMessage("");
+    setSaved(false);
 
-    const { error } = await supabase.from("profiles").upsert(
-      {
-        id: user.id,
-        display_name: name.trim(),
-        experience_level: level,
-        updated_at: new Date().toISOString()
-      },
-      { onConflict: "id" }
-    );
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .upsert(
+          {
+            id: user.id,
+            display_name: name.trim(),
+            experience_level: level,
+            goal: goal,
+            updated_at: new Date().toISOString()
+          },
+          { onConflict: "id" }
+        );
 
-    setBusy(false);
+      if (error) throw error;
 
-    if (error) {
-      setAuthMessage("Could not save profile: " + error.message);
-      setSaved(false);
-      return;
+      setSaved(true);
+      setAuthMessage(
+        "Your GymLink profile has been saved!"
+      );
+    } catch (error) {
+      setAuthMessage(
+        "Could not save profile: " + error.message
+      );
+    } finally {
+      setBusy(false);
     }
-
-    setSaved(true);
-    setAuthMessage(
-      "Profile saved to your GymLink account. Your selected goal is not saved yet."
-    );
   }
 
   return (
@@ -183,11 +228,15 @@ function App() {
         <div className="logo">
           GYM<span>LINK</span>
         </div>
+
         <p className="tagline">
           Meet people. Train together. Get healthier.
         </p>
+
         <p>
-          {user ? `Logged in: ${user.email}` : "Welcome to GymLink"}
+          {user
+            ? `Logged in: ${user.email}`
+            : "Welcome to GymLink"}
         </p>
       </header>
 
@@ -203,7 +252,9 @@ function App() {
           <button
             key={item}
             className={
-              page === item ? "nav-button active" : "nav-button"
+              page === item
+                ? "nav-button active"
+                : "nav-button"
             }
             onClick={() => setPage(item)}
           >
@@ -223,16 +274,22 @@ function App() {
                 <br />
                 Get healthier.
               </h1>
+
               <p>
-                Connect with gym friends, find training partners
-                and build a fitness community that keeps you motivated.
+                Connect with gym friends, find training
+                partners and build a fitness community
+                that keeps you motivated.
               </p>
+
               <button
                 className="primary-button"
-                onClick={() => setPage("Find Gym Friends")}
+                onClick={() =>
+                  setPage("Find Gym Friends")
+                }
               >
                 Find Gym Friends
               </button>
+
               {!user && (
                 <p>
                   <button
@@ -246,27 +303,37 @@ function App() {
             </section>
 
             <section>
-              <h2>Everything you need to stay motivated</h2>
+              <h2>
+                Everything you need to stay motivated
+              </h2>
+
               <div className="grid">
                 <Feature
                   title="Find Gym Friends"
                   text="Meet people with similar fitness goals."
-                  onClick={() => setPage("Find Gym Friends")}
+                  onClick={() =>
+                    setPage("Find Gym Friends")
+                  }
                 />
+
                 <Feature
                   title="Build Your Profile"
                   text="Share your fitness level and goals."
                   onClick={() => setPage("Profile")}
                 />
+
                 <Feature
                   title="Train at Home"
                   text="Follow workouts outside the gym."
                   onClick={() => setPage("Train at Home")}
                 />
+
                 <Feature
                   title="Train Together"
                   text="Keep each other motivated."
-                  onClick={() => setPage("Find Gym Friends")}
+                  onClick={() =>
+                    setPage("Find Gym Friends")
+                  }
                 />
               </div>
             </section>
@@ -275,14 +342,18 @@ function App() {
 
         {page === "Account" && (
           <section className="page-section">
-            <h1>{user ? "Your Account" : "Join GymLink"}</h1>
+            <h1>
+              {user ? "Your Account" : "Join GymLink"}
+            </h1>
 
             {user ? (
               <div className="profile-box">
                 <p>You are logged in as:</p>
                 <strong>{user.email}</strong>
 
-                <p>Your account is connected to Supabase.</p>
+                <p>
+                  Your account is connected to Supabase.
+                </p>
 
                 <button
                   className="primary-button"
@@ -293,9 +364,10 @@ function App() {
 
                 <button
                   className="primary-button"
+                  disabled={busy}
                   onClick={handleLogout}
                 >
-                  Log Out
+                  {busy ? "Please wait..." : "Log Out"}
                 </button>
               </div>
             ) : (
@@ -329,18 +401,26 @@ function App() {
                 </h2>
 
                 <form onSubmit={handleAuth}>
-                  <label htmlFor="account-email">Email address</label>
+                  <label htmlFor="account-email">
+                    Email address
+                  </label>
+
                   <input
                     id="account-email"
                     type="email"
                     autoComplete="email"
                     required
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) =>
+                      setEmail(e.target.value)
+                    }
                     placeholder="you@example.com"
                   />
 
-                  <label htmlFor="account-password">Password</label>
+                  <label htmlFor="account-password">
+                    Password
+                  </label>
+
                   <input
                     id="account-password"
                     type="password"
@@ -352,7 +432,9 @@ function App() {
                     minLength={6}
                     required
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) =>
+                      setPassword(e.target.value)
+                    }
                     placeholder="At least 6 characters"
                   />
 
@@ -382,22 +464,30 @@ function App() {
         {page === "Find Gym Friends" && (
           <section className="page-section">
             <h1>Find Gym Friends</h1>
+
             <p className="muted">
               Start building your fitness community.
             </p>
+
             <div className="profile-box">
-              <h2>Meet your future training partner</h2>
+              <h2>
+                Meet your future training partner
+              </h2>
+
               <p>
-                Create your profile to tell people about your goals
-                and training level.
+                Create your profile to tell people about
+                your goals and training level.
               </p>
+
               <button
                 className="primary-button"
                 onClick={() =>
                   setPage(user ? "Profile" : "Account")
                 }
               >
-                {user ? "Create My Profile" : "Sign Up to Get Started"}
+                {user
+                  ? "Create My Profile"
+                  : "Sign Up to Get Started"}
               </button>
             </div>
           </section>
@@ -423,7 +513,11 @@ function App() {
 
             {!user ? (
               <div className="profile-box">
-                <p>Log in to save your profile to your account.</p>
+                <p>
+                  Log in to save your profile to your
+                  account.
+                </p>
+
                 <button
                   className="primary-button"
                   onClick={() => setPage("Account")}
@@ -433,7 +527,10 @@ function App() {
               </div>
             ) : (
               <div className="profile-box">
-                <label htmlFor="profile-name">Your name</label>
+                <label htmlFor="profile-name">
+                  Your name
+                </label>
+
                 <input
                   id="profile-name"
                   value={name}
@@ -444,7 +541,10 @@ function App() {
                   placeholder="Enter your name"
                 />
 
-                <label htmlFor="profile-level">Fitness level</label>
+                <label htmlFor="profile-level">
+                  Fitness level
+                </label>
+
                 <select
                   id="profile-level"
                   value={level}
@@ -458,11 +558,17 @@ function App() {
                   <option>Advanced</option>
                 </select>
 
-                <label htmlFor="profile-goal">Your goal</label>
+                <label htmlFor="profile-goal">
+                  Your goal
+                </label>
+
                 <select
                   id="profile-goal"
                   value={goal}
-                  onChange={(e) => setGoal(e.target.value)}
+                  onChange={(e) => {
+                    setGoal(e.target.value);
+                    setSaved(false);
+                  }}
                 >
                   <option>Build muscle</option>
                   <option>Lose weight</option>
@@ -479,7 +585,9 @@ function App() {
                   {busy ? "Saving..." : "Save Profile"}
                 </button>
 
-                {saved && <p>Profile saved successfully.</p>}
+                {saved && (
+                  <p>Profile saved successfully.</p>
+                )}
               </div>
             )}
 
@@ -494,7 +602,9 @@ function App() {
 
       <footer>
         <strong>GymLink</strong>
-        <p>Meet people. Train together. Get healthier.</p>
+        <p>
+          Meet people. Train together. Get healthier.
+        </p>
         <p>© 2026 GymLink</p>
       </footer>
     </div>
@@ -506,7 +616,11 @@ function Feature({ title, text, onClick }) {
     <article className="card">
       <h3>{title}</h3>
       <p>{text}</p>
-      <button className="text-button" onClick={onClick}>
+
+      <button
+        className="text-button"
+        onClick={onClick}
+      >
         Explore →
       </button>
     </article>
@@ -518,10 +632,17 @@ function WorkoutPage({ title, description }) {
     <section className="page-section">
       <h1>{title}</h1>
       <p className="muted">{description}</p>
+
       <div className="grid">
         {workouts.map((workout) => (
-          <article className="card" key={workout.name}>
-            <span className="badge">{workout.level}</span>
+          <article
+            className="card"
+            key={workout.name}
+          >
+            <span className="badge">
+              {workout.level}
+            </span>
+
             <h3>{workout.name}</h3>
             <p>{workout.description}</p>
           </article>
@@ -531,45 +652,6 @@ function WorkoutPage({ title, description }) {
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
-async function saveProfile() {
-  if (!user) {
-    setAuthMessage("Please log in before saving your profile.");
-    setPage("Account");
-    return;
-  }
-
-  if (!name.trim()) {
-    setAuthMessage("Please enter your name.");
-    return;
-  }
-
-  setBusy(true);
-  setAuthMessage("");
-  setSaved(false);
-
-  try {
-    const { error } = await supabase
-      .from("profiles")
-      .upsert(
-        {
-          id: user.id,
-          display_name: name.trim(),
-          experience_level: level,
-          goal: goal,
-          updated_at: new Date().toISOString()
-        },
-        { onConflict: "id" }
-      );
-
-    if (error) throw error;
-
-    setSaved(true);
-    setAuthMessage("Your GymLink profile has been saved!");
-  } catch (error) {
-    setAuthMessage("Could not save profile: " + error.message);
-  } finally {
-    setBusy(false);
-  }
-}
-
+createRoot(document.getElementById("root")).render(
+  <App />
+);
