@@ -215,3 +215,136 @@ function App() {
       setBusy(false);
     }
   }
+
+  return (
+    <div className="app">
+      <header>
+        <h1>GymLink</h1>
+        <p>Your fitness journey starts here.</p>
+        <nav>
+          <button onClick={() => setPage("Home")}>Home</button>
+          <button onClick={() => setPage("Workouts")}>Workouts</button>
+          {user ? (
+            <>
+              <button onClick={() => setPage("Profile")}>My Profile</button>
+              <button onClick={handleLogout} disabled={busy}>Log Out</button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => openAccount("login")}>Log In</button>
+              <button onClick={() => openAccount("signup")}>Register</button>
+            </>
+          )}
+        </nav>
+      </header>
+
+      <main>
+        {page === "Home" && (
+          <section>
+            <h2>Welcome to GymLink</h2>
+            <p>Discover workouts, build strength and track your fitness goals.</p>
+            <button onClick={() => setPage("Workouts")}>Explore Workouts</button>
+            {!user && (
+              <button onClick={() => openAccount("signup")}>Create Account</button>
+            )}
+          </section>
+        )}
+
+        {page === "Workouts" && (
+          <section>
+            <h2>Workout Plans</h2>
+            {workouts.map((workout) => (
+              <article key={workout.name}>
+                <h3>{workout.name}</h3>
+                <p><strong>Level:</strong> {workout.level}</p>
+                <p>{workout.description}</p>
+                <button onClick={() => {
+                  setAuthMessage("");
+                  setPage("Workout");
+                }}>View Workout</button>
+              </article>
+            ))}
+          </section>
+        )}
+
+        {page === "Workout" && (
+          <section>
+            <h2>Workout Details</h2>
+            <p>Choose a workout plan from the Workouts page to get started.</p>
+            <button onClick={() => setPage("Workouts")}>Back to Workouts</button>
+          </section>
+        )}
+
+        {page === "Account" && (
+          <section>
+            <h2>{authMode === "signup" ? "Register" : "Log In"}</h2>
+            <form onSubmit={handleAuth}>
+              <label htmlFor="email">Email address</label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                minLength={6}
+                required
+              />
+
+              <button type="submit" disabled={busy}>
+                {busy ? "Please wait..." : authMode === "signup" ? "Register" : "Log In"}
+              </button>
+            </form>
+
+            <button onClick={() => openAccount(authMode === "signup" ? "login" : "signup")}>
+              {authMode === "signup" ? "Already registered? Log In" : "Need an account? Register"}
+            </button>
+          </section>
+        )}
+
+        {page === "Profile" && (
+          <section>
+            <h2>My Profile</h2>
+            <label htmlFor="name">Your name</label>
+            <input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter your name"
+            />
+
+            <label htmlFor="goal">Fitness goal</label>
+            <select id="goal" value={goal} onChange={(e) => setGoal(e.target.value)}>
+              <option>Build muscle</option>
+              <option>Lose weight</option>
+              <option>Improve fitness</option>
+              <option>Increase strength</option>
+            </select>
+
+            <label htmlFor="level">Experience level</label>
+            <select id="level" value={level} onChange={(e) => setLevel(e.target.value)}>
+              <option>Beginner</option>
+              <option>Intermediate</option>
+              <option>Advanced</option>
+            </select>
+
+            <button onClick={saveProfile} disabled={busy}>
+              {busy ? "Saving..." : "Save Profile"}
+            </button>
+          </section>
+        )}
+
+        {authMessage && <p role="status">{authMessage}</p>}
+      </main>
+    </div>
+  );
+}
+
+export default App;
