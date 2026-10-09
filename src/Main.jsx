@@ -532,3 +532,44 @@ function WorkoutPage({ title, description }) {
 }
 
 createRoot(document.getElementById("root")).render(<App />);
+async function saveProfile() {
+  if (!user) {
+    setAuthMessage("Please log in before saving your profile.");
+    setPage("Account");
+    return;
+  }
+
+  if (!name.trim()) {
+    setAuthMessage("Please enter your name.");
+    return;
+  }
+
+  setBusy(true);
+  setAuthMessage("");
+  setSaved(false);
+
+  try {
+    const { error } = await supabase
+      .from("profiles")
+      .upsert(
+        {
+          id: user.id,
+          display_name: name.trim(),
+          experience_level: level,
+          goal: goal,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: "id" }
+      );
+
+    if (error) throw error;
+
+    setSaved(true);
+    setAuthMessage("Your GymLink profile has been saved!");
+  } catch (error) {
+    setAuthMessage("Could not save profile: " + error.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
