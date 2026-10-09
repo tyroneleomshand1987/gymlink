@@ -1,0 +1,33 @@
+
+<header className="site-header">
+  <div className="logo">
+    GYMLINK
+  </div>
+
+  <nav className="main-nav">
+    <a href="#home">Home</a>
+    <a href="#friends">Find Gym Friends</a>
+    <a href="#workouts">Workouts</a>
+    <a href="#profile">Profile</a>
+  </nav>
+
+  <div className="auth-buttons">
+    <button
+      type="button"
+      onClick={() => {
+        window.location.hash = "account";
+      }}
+    >
+      Log In
+    </button>
+
+    <button
+      type="button"
+      onClick={() => {
+        window.location.hash = "account";
+      }}
+    >
+      Sign Up
+    </button>
+  </div>
+</header>
